@@ -40,12 +40,6 @@ func New() *Handler {
 	return &Handler{}
 }
 
-// AppAdd implements `fxadmin modify app add`.
-func (*Handler) AppAdd(orgPath, blockPath string) error {
-	logger.Debugf("modify app add: org=%s block=%s (not implemented)", orgPath, blockPath)
-	return ErrNotImplemented
-}
-
 // AppRemove implements `fxadmin modify app remove`.
 func (*Handler) AppRemove(org, blockPath string) error {
 	logger.Debugf("modify app remove: org=%s block=%s (not implemented)", org, blockPath)
