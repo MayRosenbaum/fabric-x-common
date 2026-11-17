@@ -384,7 +384,9 @@ func (c *CLI) addModifyPartyNodeCommand(party *kingpin.CmdClause) {
 		String()
 	var portSet bool
 	port := node.Flag(flagPort, "New port, 1-65535 (unchanged if omitted).").IsSetByUser(&portSet).Uint32()
-	tlsCert := node.Flag(flagTLSCert, "Path to new TLS certificate (unchanged if omitted).").ExistingFile()
+	tlsCert := node.Flag(flagTLSCert,
+		"Path to new TLS certificate, set as both the node's client and server TLS certificate "+
+			"(unchanged if omitted).").ExistingFile()
 	signCert := node.Flag(flagSignCert, "Path to new signing certificate (unchanged if omitted).").ExistingFile()
 	block := blockFlag(node)
 	// A batcher is selected by its shard and no other role has one, so --shard is

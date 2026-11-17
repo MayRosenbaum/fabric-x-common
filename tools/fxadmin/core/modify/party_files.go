@@ -105,8 +105,12 @@ func readPaths(value any, dir string) (any, error) {
 }
 
 // readPEMFile reads the PEM file at path and returns its first PEM block,
-// base64-encoded. Only that block is kept, so a private key in the same file
-// is not copied into the block.
+// base64-encoded. Only that block is kept, so whatever follows it in the file,
+// such as the private key of a certificate, is not copied into the block. The
+// type of the block is not checked, so a file must start with its certificate
+// or CRL.
+// TODO: check that the block is a certificate, or a CRL for a revocation list,
+// when the validation checks are integrated into fxadmin.
 func readPEMFile(path, dir string) (string, error) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(dir, path)

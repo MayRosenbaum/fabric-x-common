@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	cb "github.com/hyperledger/fabric-protos-go-apiv2/common"
+	mspproto "github.com/hyperledger/fabric-protos-go-apiv2/msp"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 	"google.golang.org/protobuf/proto"
@@ -145,7 +146,9 @@ func TestPartyAddRejects(t *testing.T) {
 		orgName              string
 		withoutConsenterNode bool
 		withoutOrgMSP        bool
-		wantErr              string
+		// mspName replaces the name of the org's Fabric MSP, when set.
+		mspName *string
+		wantErr string
 	}{
 		{
 			name:    "orderer org already in the block",
@@ -171,7 +174,14 @@ func TestPartyAddRejects(t *testing.T) {
 			partyID:       joiningPartyID,
 			orgName:       joiningOrdererOrg,
 			withoutOrgMSP: true,
-			wantErr:       "the edited config is not a valid channel config",
+			wantErr:       `invalid orderer org "orderer-org-2": no MSP value`,
+		},
+		{
+			name:    "org MSP without a name",
+			partyID: joiningPartyID,
+			orgName: joiningOrdererOrg,
+			mspName: new(""),
+			wantErr: `invalid orderer org "orderer-org-2": the Fabric MSP has no name`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -185,6 +195,9 @@ func TestPartyAddRejects(t *testing.T) {
 			caseOrg := proto.CloneOf(org)
 			if tc.withoutOrgMSP {
 				delete(caseOrg.Values, channelconfig.MSPKey)
+			}
+			if tc.mspName != nil {
+				setPartyTestMSPName(t, caseOrg, *tc.mspName)
 			}
 			blockPath := writeNodeTestBlock(t, baseBlock)
 			definitionDir, definition := renderPartyDefinition(t, caseParty, tc.orgName, caseOrg)
@@ -854,6 +867,18 @@ func setPartyTestNodeHost(t *testing.T, party *ordererpb.PartyConfig, role, host
 	default:
 		require.Failf(t, "unknown node role", "role %q", role)
 	}
+}
+
+// setPartyTestMSPName sets the name of the org's Fabric MSP.
+func setPartyTestMSPName(t *testing.T, org *cb.ConfigGroup, name string) {
+	t.Helper()
+	fabricConfig := nodeTestFabricMSPConfig(t, org)
+	fabricConfig.Name = name
+	value := org.GetValues()[channelconfig.MSPKey]
+	mspConfig := &mspproto.MSPConfig{}
+	require.NoError(t, proto.Unmarshal(value.GetValue(), mspConfig))
+	mspConfig.Config = protoutil.MarshalOrPanic(fabricConfig)
+	value.Value = protoutil.MarshalOrPanic(mspConfig)
 }
 
 // requireArmaBlockUnchanged asserts that the block file at path still holds want.

@@ -44,14 +44,15 @@ type partyDefinition struct {
 
 // PartyAdd implements `fxadmin modify party add`. The party definition at
 // partyPath holds the party's entry of the ARMA shared config (Party) and the
-// config group of its new orderer org (Org), both exactly as the block stores
-// them. They are added to the config block at blockPath, which is rewritten in
-// place. The org group carries the org's Endpoints value, the router's
-// broadcast and the assembler's deliver addresses, which is added as given.
-// The command also updates the elements of the block that must agree with the
-// new party: the shared config's MaxPartyID, the party's consenter in the
-// Orderers value, and the Orderer group's BlockValidation policy over all the
-// consenters.
+// config group of its new orderer org (Org), each mirroring its form in the
+// config block, except that every certificate and CRL is given as the path of
+// its PEM file. They are added to the config block at blockPath, which is
+// rewritten in place. The org group carries the org's Endpoints value, the
+// router's broadcast and the assembler's deliver addresses, which is added as
+// given. The command also updates the elements of the block that must agree
+// with the new party: the shared config's MaxPartyID, the party's consenter in
+// the Orderers value, and the Orderer group's BlockValidation policy over all
+// the consenters.
 func (*Handler) PartyAdd(partyPath, blockPath string) error {
 	logger.Debugf("modify party add: party=%s block=%s", partyPath, blockPath)
 
@@ -100,7 +101,11 @@ func addParty(orderer *cb.ConfigGroup, def *partyDefinition) error {
 	if err := validateOrgEndpoints(def.org); err != nil {
 		return fmt.Errorf("invalid orderer org %q: %w", def.orgName, err)
 	}
-	consenter, err := consenterOf(def.party, orgMSPID(def.org))
+	mspID, err := orgMSPID(def.org)
+	if err != nil {
+		return fmt.Errorf("invalid orderer org %q: %w", def.orgName, err)
+	}
+	consenter, err := consenterOf(def.party, mspID)
 	if err != nil {
 		return err
 	}
@@ -228,22 +233,29 @@ func validateOrgEndpoints(org *cb.ConfigGroup) error {
 	return nil
 }
 
-// orgMSPID returns the MSP ID of an org group, or "" if it cannot be read.
-func orgMSPID(org *cb.ConfigGroup) string {
+// orgMSPID returns the MSP ID of an org group: the name of its Fabric MSP.
+func orgMSPID(org *cb.ConfigGroup) (string, error) {
+	value := org.GetValues()[channelconfig.MSPKey]
+	if value == nil {
+		return "", errors.Newf("no %s value", channelconfig.MSPKey)
+	}
 	mspConfig := &mspproto.MSPConfig{}
-	if err := proto.Unmarshal(org.GetValues()[channelconfig.MSPKey].GetValue(), mspConfig); err != nil {
-		return ""
+	if err := proto.Unmarshal(value.GetValue(), mspConfig); err != nil {
+		return "", errors.Wrap(err, "failed to unmarshal the MSP value")
 	}
 	fabricConfig := &mspproto.FabricMSPConfig{}
 	if err := proto.Unmarshal(mspConfig.GetConfig(), fabricConfig); err != nil {
-		return ""
+		return "", errors.Wrap(err, "failed to unmarshal the Fabric MSP config")
 	}
-	return fabricConfig.GetName()
+	if fabricConfig.GetName() == "" {
+		return "", errors.New("the Fabric MSP has no name")
+	}
+	return fabricConfig.GetName(), nil
 }
 
 // loadPartyDefinition reads the party definition YAML at path. Its Party is the
 // party's PartiesConfig entry and its Org the org's config group plus a Name
-// key, both in the structure `fxadmin decode` renders, except that each
+// key, each mirroring its form in the config block, except that every
 // certificate and CRL is given as the path of its PEM file instead of its
 // content. A relative path is relative to the directory of the definition. The
 // files are read in, and the two sections are then decoded as is.
